@@ -17,7 +17,7 @@ async def send_request(encrypted_uid, token, url, uid="", max_retries=3):
             "Content-Type": "application/x-www-form-urlencoded",
             "X-Unity-Version": "2018.4.11f1",
             "X-GA": "v1 1",
-            "ReleaseVersion": "OB49",
+            "ReleaseVersion": "OB50",
         }
         
         # Enhanced retry logic for specific UIDs
@@ -124,7 +124,7 @@ def make_request(encrypt, server_name, token):
         "Expect": "100-continue",
         "X-Unity-Version": "2018.4.11f1",
         "X-GA": "v1 1",
-        "ReleaseVersion": "OB49",
+        "ReleaseVersion": "OB50",
     }
     try:
         response = requests.post(url, data=edata, headers=headers, verify=False, timeout=15)
