@@ -377,7 +377,7 @@ def status():
             "Multi-region support with 276+ real tokens",
             "Send 200 requests per UID for maximum likes",
             "Smart batch processing for maximum success rate",
-            "Real-time token generation every 4 hours"
+            "Smart token generation every 6 hours with random selection"
         ],
         "usage": {
             "endpoint": "/like?uid=YOUR_UID",

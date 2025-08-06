@@ -36,8 +36,8 @@ class RealTokenGenerator:
         self.is_running = False
         self.generation_thread = None
         self.tokens_lock = Lock()
-        # Rate limiting semaphore to control concurrent requests
-        self.request_semaphore = Semaphore(4)  # Max 4 concurrent requests
+        # Remove rate limiting for faster token generation
+        self.request_semaphore = Semaphore(10)  # Increased to 10 for faster processing
         # Create persistent session for reuse
         self.session = requests.Session()
         self.session.verify = False
@@ -684,8 +684,8 @@ class RealTokenGenerator:
 
                 logger.info(f"Generating REAL JWT token for {region_name} account {i}/{total_accounts} (UID: {uid})")
                 
-                # Add small delay before each request to further avoid rate limiting
-                time.sleep(0.4)  # Increased delay for better rate limiting
+                # Minimal delay for faster processing
+                time.sleep(0.1)  # Reduced delay for faster token generation
                 
                 token_result = self.generate_real_jwt_token(uid, password)
                 
@@ -721,16 +721,16 @@ class RealTokenGenerator:
             for i, account in enumerate(accounts)
         ]
         
-        # Use ThreadPoolExecutor with ultra-aggressive rate limiting to avoid HTTP 429 errors
-        max_workers = min(3, total_accounts)  # Reduced to 3 for better rate control
+        # Use ThreadPoolExecutor with maximum concurrency for faster generation
+        max_workers = min(10, total_accounts)  # Increased to 10 for faster processing
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit tasks with delays to avoid overwhelming the API
             future_to_account = {}
             for i, account_data in enumerate(account_data_list):
-                # Add small delay between submissions to spread out the load
-                if i > 0 and i % 3 == 0:  # Every 3 submissions, wait longer
-                    time.sleep(0.8)
+                # Minimal delay for faster submission
+                if i > 0 and i % 10 == 0:  # Every 10 submissions, brief pause
+                    time.sleep(0.1)
                 future = executor.submit(self.process_single_account, account_data)
                 future_to_account[future] = account_data
             
@@ -750,9 +750,41 @@ class RealTokenGenerator:
             
         return len(successful_tokens)
 
+    def check_token_validity(self) -> bool:
+        """Check if existing tokens are still valid (less than 5 hours old)"""
+        try:
+            from models import db, TokenRecord
+            from main import app
+            from datetime import datetime, timedelta
+            
+            with app.app_context():
+                # Check if we have recent tokens (less than 6 hours old)
+                six_hours_ago = datetime.utcnow() - timedelta(hours=6)
+                
+                recent_tokens = TokenRecord.query.filter(
+                    TokenRecord.generated_at > six_hours_ago,
+                    TokenRecord.is_active == True
+                ).count()
+                
+                if recent_tokens > 0:
+                    logger.info(f"✅ Found {recent_tokens} valid tokens less than 6 hours old - skipping generation")
+                    return True
+                else:
+                    logger.info("⏰ No valid tokens found or tokens are older than 6 hours - generating new tokens")
+                    return False
+                    
+        except Exception as e:
+            logger.warning(f"Token validity check failed: {e} - will generate new tokens")
+            return False
+
     def generate_all_tokens(self):
-        """Generate tokens for all regions"""
+        """Generate tokens for all regions with smart validation"""
         logger.info("🚀 Starting automatic REAL JWT token generation for all regions...")
+        
+        # Check if we need to generate new tokens
+        if self.check_token_validity():
+            logger.info("🔄 Tokens are still valid (less than 6 hours old) - skipping generation cycle")
+            return
         
         regions = [
             ("IND_ACC.json", "tokens/ind.json", "India"),
@@ -778,12 +810,12 @@ class RealTokenGenerator:
             
         self.is_running = True
         
-        # Schedule token generation every 4 hours
-        schedule.every(4).hours.do(self.generate_all_tokens)
-        logger.info("⏰ Automatic token refresh set for every 4 hours")
+        # Schedule token generation every 6 hours
+        schedule.every(6).hours.do(self.generate_all_tokens)
+        logger.info("⏰ Automatic token refresh set for every 6 hours")
         
-        # Generate tokens immediately on start
-        threading.Thread(target=self.generate_all_tokens, daemon=True).start()
+        # Check and generate tokens on start if needed
+        threading.Thread(target=self.smart_startup_generation, daemon=True).start()
         
         def run_scheduler():
             while self.is_running:
@@ -793,7 +825,21 @@ class RealTokenGenerator:
         self.generation_thread = threading.Thread(target=run_scheduler, daemon=True)
         self.generation_thread.start()
         
-        logger.info("🔄 REAL JWT Token generator started - will regenerate tokens every 4 hours")
+        logger.info("🔄 REAL JWT Token generator started - will regenerate tokens every 6 hours")
+
+    def smart_startup_generation(self):
+        """Smart startup - only generate if tokens are old or missing"""
+        try:
+            # Check if we need new tokens before generating
+            if not self.check_token_validity():
+                logger.info("🚀 Starting initial token generation...")
+                self.generate_all_tokens()
+            else:
+                logger.info("✅ Valid tokens found - startup generation skipped")
+        except Exception as e:
+            logger.error(f"Startup generation error: {e}")
+            # Fallback to normal generation if check fails
+            self.generate_all_tokens()
 
     def stop_scheduler(self):
         """Stop the automatic token generation scheduler"""
