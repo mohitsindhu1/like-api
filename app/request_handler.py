@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import requests
+import random
 from app.utils import load_tokens
 from app.encryption import encrypt_message
 from app.protobuf_handler import create_like_protobuf, decode_protobuf
@@ -78,7 +79,10 @@ async def send_multiple_requests(uid, server_name, url):
     if tokens is None:
         return None
 
-    # Target: Send 200 requests for maximum impact
+    # Additional randomization - shuffle again before using
+    random.shuffle(tokens)
+    
+    # Target: Send 200 requests for maximum impact with random token selection
     TARGET_LIKES = 150  # Higher target for better results
     MAX_REQUESTS = min(len(tokens), 200)  # Increased to 200 requests
     
@@ -103,6 +107,9 @@ async def send_multiple_requests(uid, server_name, url):
     for batch_start in range(0, min(MAX_REQUESTS, len(tokens)), batch_size):
         batch_end = min(batch_start + batch_size, min(MAX_REQUESTS, len(tokens)))
         batch_tokens = tokens[batch_start:batch_end]
+        
+        # Additional shuffle for each batch to maximize randomness
+        random.shuffle(batch_tokens)
         
         print(f"📤 Sending batch {batch_start//batch_size + 1}: tokens {batch_start+1}-{batch_end}")
         

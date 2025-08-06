@@ -1,5 +1,6 @@
 import json
 import os
+import random
 
 
 def load_tokens(server_name):
@@ -18,7 +19,9 @@ def load_tokens(server_name):
                         "uid": token_record.uid,
                         "server": server_name.upper()
                     })
-                print(f"📊 Loaded {len(token_list)} tokens from custom Neon database for {server_name.upper()} server")
+                # Shuffle tokens randomly for each request to ensure different tokens are used
+                random.shuffle(token_list)
+                print(f"📊 Loaded {len(token_list)} tokens from custom Neon database for {server_name.upper()} server (randomly shuffled)")
                 return token_list
             else:
                 print(f"⚠️ No tokens found in custom Neon database for {server_name.upper()} server")
