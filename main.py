@@ -1706,31 +1706,133 @@ def save_generated_token(region, token_data):
 
 @app.route('/access-jwt', methods=['GET'])
 def majorlogin_jwt():
-    """Forward access token to external API and return response"""
+    """Convert access token to JWT token with region support and save it"""
     access_token = request.args.get('access_token')
+    provided_open_id = request.args.get('open_id')
+    region = request.args.get('region', '').upper()
 
     if not access_token:
         return jsonify({"message": "missing access_token"}), 400
-
-    try:
-        # Forward request to external API
-        external_url = "https://access-token-tau.vercel.app/access-jwt"
-        params = {'access_token': access_token}
-        
-        response = requests.get(external_url, params=params, timeout=10)
-        
-        # Return the response from external API
-        try:
-            return jsonify(response.json()), response.status_code
-        except ValueError:
-            return Response(response.text, status=response.status_code, content_type='text/plain')
     
-    except requests.exceptions.Timeout:
-        return jsonify({"message": "Request timeout - external API took too long to respond"}), 408
-    except requests.exceptions.RequestException as e:
-        return jsonify({"message": f"Failed to reach external API: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"message": f"Error: {str(e)}"}), 500
+    if not region:
+        return jsonify({"message": "missing region. Must provide one of: IND, AG, NX, BD, or PK"}), 400
+
+    if region not in ['IND', 'AG', 'NX', 'BD', 'PK']:
+        return jsonify({"message": "Invalid region. Must be IND, AG, NX, BD, or PK"}), 400
+
+    # Try to get open_id from external API first
+    open_id = provided_open_id
+    if not open_id:
+        try:
+            external_api_url = "https://access-token-tau.vercel.app/access-jwt"
+            params = {'access_token': access_token}
+            ext_response = requests.get(external_api_url, params=params, timeout=10)
+            
+            if ext_response.status_code == 200:
+                try:
+                    ext_data = ext_response.json()
+                    open_id = ext_data.get('open_id')
+                except:
+                    pass
+        except:
+            pass
+        
+        # If external API didn't work, try fetch_open_id
+        if not open_id:
+            open_id, error = fetch_open_id(access_token)
+            if error:
+                return jsonify({"message": error}), 400
+
+    platforms = [8, 3, 4, 6]
+
+    for platform_type in platforms:
+        try:
+            game_data = my_pb2.GameData()
+            game_data.timestamp = "2024-12-05 18:15:32"
+            game_data.game_name = "free fire"
+            game_data.game_version = 1
+            game_data.version_code = "1.108.3"
+            game_data.os_info = "Android OS 9 / API-28 (PI/rel.cjw.20220518.114133)"
+            game_data.device_type = "Handheld"
+            game_data.network_provider = "Verizon Wireless"
+            game_data.connection_type = "WIFI"
+            game_data.screen_width = 1280
+            game_data.screen_height = 960
+            game_data.dpi = "240"
+            game_data.cpu_info = "ARMv7 VFPv3 NEON VMH | 2400 | 4"
+            game_data.total_ram = 5951
+            game_data.gpu_name = "Adreno (TM) 640"
+            game_data.gpu_version = "OpenGL ES 3.0"
+            game_data.user_id = "Google|74b585a9-0268-4ad3-8f36-ef41d2e53610"
+            game_data.ip_address = "172.190.111.97"
+            game_data.language = "en"
+            game_data.open_id = open_id
+            game_data.access_token = access_token
+            game_data.platform_type = platform_type
+            game_data.field_99 = str(platform_type)
+            game_data.field_100 = str(platform_type)
+
+            serialized_data = game_data.SerializeToString()
+            encrypted_data = encrypt_message(serialized_data)
+            hex_encrypted_data = binascii.hexlify(encrypted_data).decode('utf-8')
+
+            url = "https://loginbp.ggblueshark.com/MajorLogin"
+            headers = {
+                "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+                "Connection": "Keep-Alive",
+                "Accept-Encoding": "gzip",
+                "Content-Type": "application/octet-stream",
+                "X-Unity-Version": "2018.4.11f1",
+                "X-GA": "v1 1",
+                "ReleaseVersion": "OB51"
+            }
+            edata = bytes.fromhex(hex_encrypted_data)
+
+            response = requests.post(url, data=edata, headers=headers, verify=False, timeout=10)
+
+            if response.status_code == 200:
+                data_dict = None
+                try:
+                    example_msg = output_pb2.Garena_420()
+                    example_msg.ParseFromString(response.content)
+                    data_dict = {field.name: getattr(example_msg, field.name)
+                                 for field in example_msg.DESCRIPTOR.fields
+                                 if field.name not in ["binary", "binary_data", "Garena420"]}
+                except Exception:
+                    try:
+                        data_dict = response.json()
+                    except ValueError:
+                        continue
+
+                if data_dict and "token" in data_dict:
+                    token_value = data_dict["token"]
+                    try:
+                        decoded_token = jwt.decode(token_value, options={"verify_signature": False})
+                    except Exception as e:
+                        decoded_token = {}
+
+                    result = {
+                        "account_id": decoded_token.get("account_id"),
+                        "account_name": decoded_token.get("nickname"),
+                        "open_id": open_id,
+                        "access_token": access_token,
+                        "platform": decoded_token.get("external_type"),
+                        "region": region,
+                        "status": "success",
+                        "token": token_value
+                    }
+                    
+                    # Save token to region-specific file
+                    try:
+                        save_generated_token(region, result)
+                    except Exception as e:
+                        app.logger.error(f"Failed to save token: {e}")
+                    
+                    return jsonify(result), 200
+        except requests.RequestException:
+            continue
+
+    return jsonify({"message": "No valid platform found"}), 400
 
 @app.route('/token', methods=['GET'])
 def oauth_guest():
