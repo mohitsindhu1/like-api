@@ -1,0 +1,15 @@
+{
+  "api_urls": {
+    "player_info": "http://raw.thug4ff.com/info?uid={uid}",
+    "ban_check": "http://raw.thug4ff.com/check_ban/{uid}",
+    "gen_profile": "http://profile.thug4ff.com/api/profile?uid={uid}"
+  },
+  "settings": {
+    "request_timeout": 60,
+    "max_retries": 3
+  },
+  "discord": {
+    "webhook_url": "https://discord.com/api/webhooks/1429298746759581716/Zhdd6gfx-Z5BdOhyur_1o_GsFWr3t5YcgaIeKtOGinQhthmb7I0HQ2im1otgUegeoCZA",
+    "enabled": true
+  }
+}

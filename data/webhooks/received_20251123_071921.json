@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-11-23T07:19:21.838401",
+  "source_ip": "127.0.0.1",
+  "data": {
+    "event_type": "token_generated",
+    "region": "IND",
+    "account_name": "TestAccount",
+    "uid": 12345
+  }
+}

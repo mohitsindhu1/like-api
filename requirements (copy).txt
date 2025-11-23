@@ -1,0 +1,17 @@
+
+flask>=3.1.1
+flask-sqlalchemy>=3.1.1
+flask-caching>=2.3.1
+gunicorn>=23.0.0
+psycopg2-binary>=2.9.10
+pycryptodome>=3.23.0
+python-dotenv>=1.1.1
+requests>=2.32.4
+protobuf>=6.31.1
+aiohttp>=3.12.14
+colorama>=0.4.6
+crypto>=1.4.1
+email-validator>=2.2.0
+schedule>=1.2.0
+sqlalchemy>=2.0.41
+urllib3>=2.5.0

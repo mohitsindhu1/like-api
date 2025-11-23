@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+.env
+.git
+*.log
+test_*.py
+*.zip
+.replit
+replit.nix
+uv.lock
+pyproject.toml

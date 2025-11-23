@@ -1,0 +1,16 @@
+{
+  "server_name": "NX",
+  "generated_at": "2025-11-23T06:42:28.781923",
+  "total_tokens": 1,
+  "tokens": [
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInN2ciI6IjMiLCJ0eXAiOiJKV1QifQ.eyJhY2NvdW50X2lkIjo3MTA3MTM3NDUwLCJuaWNrbmFtZSI6IkJyaWc0KDRfM1Y4Iiwibm90aV9yZWdpb24iOiJJTkQiLCJsb2NrX3JlZ2lvbiI6IklORCIsImV4dGVybmFsX2lkIjoiY2E3NDY3YTI4NDhjYTAxNTkyY2UwMzExYjgxYzgwNjciLCJleHRlcm5hbF90eXBlIjo4LCJwbGF0X2lkIjoxLCJjbGllbnRfdmVyc2lvbiI6IjEuMTA4LjMiLCJlbXVsYXRvcl9zY29yZSI6MCwiaXNfZW11bGF0b3IiOmZhbHNlLCJjb3VudHJ5X2NvZGUiOiJVUyIsImV4dGVybmFsX3VpZCI6MTUzMzAwMDc4MzM0MywicmVnX2F2YXRhciI6MTAyMDAwMDA0LCJzb3VyY2UiOjAsImxvY2tfcmVnaW9uX3RpbWUiOjE2NjkyNzkzNDEsImNsaWVudF90eXBlIjoyLCJzaWduYXR1cmVfbWQ1IjoiIiwidXNpbmdfdmVyc2lvbiI6MCwicmVsZWFzZV9jaGFubmVsIjoiIiwicmVsZWFzZV92ZXJzaW9uIjoiT0I1MSIsImV4cCI6MTc2MzkwODk0OH0.WI6KM2RyADPQqkx17UAlqY4ZBxI-39L2xO-rBWFtiH8",
+      "account_id": 7107137450,
+      "account_name": "Brig4(4_3V8",
+      "uid": 7107137450,
+      "server": "NX",
+      "generated_at": "2025-11-23T06:42:28.781904",
+      "expires_at": "2025-11-23T14:42:28.781908"
+    }
+  ]
+}
