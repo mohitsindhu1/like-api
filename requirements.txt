@@ -17,3 +17,9 @@ sqlalchemy
 PyJWT>=2.8.0
 psycopg2-binary>=2.9.9
 gunicorn
+email_validator
+flask
+flask-sqlalchemy
+gunicorn
+psycopg2-binary
+httpx

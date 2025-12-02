@@ -10,6 +10,7 @@ from app.encryption import enc
 from app.request_handler import make_request, send_multiple_requests
 from real_token_generator import real_token_generator, start_token_generation, stop_token_generation, get_generator_status, generate_tokens_now, generate_single_token
 from nickname_processor import nickname_processor
+from access_token_manager import access_token_manager
 import visit_count_pb2
 import aiohttp
 import logging
@@ -1822,8 +1823,29 @@ def majorlogin_jwt():
                         "token": token_value
                     }
                     
-                    # Save token to region-specific file
+                    # Save access token for future JWT regeneration (every 7 hours)
                     try:
+                        access_token_manager.save_access_token(
+                            region=region,
+                            access_token=access_token,
+                            open_id=open_id,
+                            account_id=decoded_token.get("account_id"),
+                            account_name=decoded_token.get("nickname")
+                        )
+                        app.logger.info(f"✅ Access token saved for {region}: {decoded_token.get('nickname')}")
+                    except Exception as e:
+                        app.logger.error(f"Failed to save access token: {e}")
+                    
+                    # Save JWT token to region-specific file for like functionality
+                    try:
+                        jwt_data = {
+                            "success": True,
+                            "token": token_value,
+                            "account_id": decoded_token.get("account_id"),
+                            "account_name": decoded_token.get("nickname"),
+                            "region": region
+                        }
+                        access_token_manager.save_jwt_to_token_file(region, jwt_data)
                         save_generated_token(region, result)
                     except Exception as e:
                         app.logger.error(f"Failed to save token: {e}")
@@ -1884,6 +1906,80 @@ def oauth_guest():
     with app.test_request_context('/access-jwt', query_string=params):
         return majorlogin_jwt()
 
+@app.route('/access-tokens', methods=['GET'])
+def get_access_tokens():
+    """Get all saved access tokens for a region"""
+    region = request.args.get('region', '').upper()
+    
+    if region and region not in ['IND', 'AG', 'NX', 'BD', 'PK']:
+        return jsonify({"error": "Invalid region. Must be IND, AG, NX, BD, or PK"}), 400
+    
+    if region:
+        data = access_token_manager.get_access_tokens_for_region(region)
+        return jsonify(data), 200
+    else:
+        all_regions = {}
+        for reg in ['IND', 'AG', 'NX', 'BD', 'PK']:
+            all_regions[reg] = access_token_manager.get_access_tokens_for_region(reg)
+        return jsonify({"regions": all_regions}), 200
+
+@app.route('/regenerate-jwts', methods=['GET', 'POST'])
+def regenerate_jwts():
+    """Manually trigger JWT regeneration from saved access tokens"""
+    region = request.args.get('region', '').upper() if request.method == 'GET' else request.json.get('region', '').upper() if request.is_json else ''
+    
+    if region and region not in ['IND', 'AG', 'NX', 'BD', 'PK']:
+        return jsonify({"error": "Invalid region. Must be IND, AG, NX, BD, or PK"}), 400
+    
+    app.logger.info(f"🔄 Manual JWT regeneration triggered for: {region or 'ALL regions'}")
+    
+    try:
+        results = access_token_manager.regenerate_all_jwts(region if region else None)
+        return jsonify({
+            "status": "success",
+            "message": f"JWT regeneration completed for {region or 'all regions'}",
+            "results": results
+        }), 200
+    except Exception as e:
+        app.logger.error(f"JWT regeneration failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/access-token-status', methods=['GET'])
+def access_token_status():
+    """Get status of access token manager and auto-regeneration"""
+    try:
+        status = access_token_manager.get_status()
+        return jsonify({
+            "status": "success",
+            "access_token_manager": status
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/start-auto-regeneration', methods=['POST', 'GET'])
+def start_auto_regen():
+    """Start automatic JWT regeneration (every 7 hours)"""
+    try:
+        access_token_manager.start_auto_regeneration()
+        return jsonify({
+            "status": "success",
+            "message": "Auto JWT regeneration started (every 7 hours)"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/stop-auto-regeneration', methods=['POST', 'GET'])
+def stop_auto_regen():
+    """Stop automatic JWT regeneration"""
+    try:
+        access_token_manager.stop_auto_regeneration()
+        return jsonify({
+            "status": "success",
+            "message": "Auto JWT regeneration stopped"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # Initialize token generation when app starts (only if not on Vercel)
 def initialize_token_generator():
     """Initialize token generator when app starts"""
@@ -1907,6 +2003,14 @@ def initialize_token_generator():
             else:
                 print("⚠️ WARNING: Scheduler may not have started properly")
                 print(f"Status: {status}")
+            
+            # Start auto JWT regeneration from access tokens (every 7 hours)
+            print("=" * 60)
+            print("🔄 Starting Auto JWT Regeneration (every 7 hours)...")
+            print("=" * 60)
+            access_token_manager.start_auto_regeneration()
+            print("✅ Auto JWT regeneration started")
+            print("=" * 60)
         else:
             print("Running on Vercel - skipping automatic token generation")
     except Exception as e:
