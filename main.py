@@ -520,6 +520,246 @@ def handle_requests():
 
     # If no server specified, try to auto-detect the correct server
     if not server_name:
+        app.logger.info(f"Auto-detecting server fy({
+            "status": "success",
+            "message": "Daily token usage statistics",
+            "daily_usage_stats": usage_stats,
+            "system_info": {
+                "daily_limit_per_token": 20,
+                "automatic_reset": "Resets every day at midnight",
+                "purpose": "Ensures each token is used maximum 20 times per day for fair distribution"
+            }
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error getting daily usage stats: {e}")
+        return unicode_jsonify({"error": str(e)}, 500)
+
+
+@app.route("/generate_token", methods=["POST", "GET"])
+def manual_token_generation():
+    """Manual token generation endpoint for testing"""
+    if request.method == "GET":
+        # Show simple form for testing
+        return """
+        <html>
+        <head><title>Manual Token Generation</title></head>
+        <body style="font-family: Arial; padding: 20px;">
+            <h2>Manual JWT Token Generation</h2>
+            <form method="POST">
+                <p><label>UID (10 digits):</label><br>
+                <input type="text" name="uid" placeholder="4059499797" style="width: 200px; padding: 5px;"></p>
+
+                <p><label>Password (64 char hex):</label><br> 
+                <input type="text" name="password" placeholder="90692811391BDC1BCAB416B78DB4293300A797E38CA8A3FD4526E538FECFAC39" style="width: 500px; padding: 5px;"></p>
+
+                <p><input type="submit" value="Generate Token" style="padding: 10px 20px; background: #007cba; color: white; border: none;"></p>
+            </form>
+        </body>
+        </html>
+        """
+
+    # Handle POST request
+    uid = request.form.get("uid") or request.json.get("uid") if request.is_json else None
+    password = request.form.get("password") or request.json.get("password") if request.is_json else None
+
+    if not uid or not password:
+        return unicode_jsonify({"error": "UID and password are required"}, 400)
+
+    try:
+        app.logger.info(f"Manual token generation requested for UID: {uid}")
+        token_result = generate_single_token(uid, password)
+
+        if token_result:
+            return unicode_jsonify({
+                "success": True,
+                "uid": uid,
+                "token": token_result["token"],
+                "message": "JWT token generated successfully"
+            })
+        else:
+            return unicode_jsonify({
+                "success": False,
+                "uid": uid,
+                "error": "Failed to generate token - check UID/password format and validity"
+            }, 400)
+
+    except Exception as e:
+        app.logger.error(f"Manual token generation error: {str(e)}")
+        return unicode_jsonify({
+            "success": False,
+            "error": f"Generation failed: {str(e)}"
+        }, 500)
+
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from byte import Encrypt_ID, encrypt_api
+
+# Headers function for friend requests (same as app.py)
+def get_headers(token: str):
+    """Generate headers for friend request API calls"""
+    return {
+        "Expect": "100-continue",
+        "Authorization": f"Bearer {token}",
+        "X-Unity-Version": "2018.4.11f1",
+        "X-GA": "v1 1",
+        "ReleaseVersion": "OB51",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; SM-N975F Build/PI)",
+        "Connection": "close",
+        "Accept-Encoding": "gzip, deflate, br"
+    }
+
+# Helper function for friend requests
+def get_server_url_friend(server_name):
+    """Get the appropriate server URL for friend requests"""
+    if server_name == "IND":
+        return "https://client.ind.freefiremobile.com/RequestAddingFriend"
+    elif server_name == "NX":
+        return "https://client.us.freefiremobile.com/RequestAddingFriend"
+    elif server_name == "AG":
+        return "https://clientbp.ggblueshark.com/RequestAddingFriend"
+    else:
+        return "https://client.ind.freefiremobile.com/RequestAddingFriend"
+
+def send_friend_request_main(uid, token, results, results_lock, server_name="IND"):
+    """Send friend request using main app's token system"""
+    encrypted_id = Encrypt_ID(uid)
+    payload = f"08a7c4839f1e10{encrypted_id}1801"
+    encrypted_payload = encrypt_api(payload)
+
+    url = get_server_url_friend(server_name)
+    headers = get_headers(token)
+
+    try:
+        response = requests.post(url, headers=headers, data=bytes.fromhex(encrypted_payload), verify=True, timeout=10)
+        app.logger.info(f"Friend request response for UID {uid} on {server_name}: Status {response.status_code}")
+
+        with results_lock:
+            if response.status_code == 200:
+                results["success"] += 1
+                app.logger.info(f"SUCCESS: Friend request sent to UID {uid} on {server_name}")
+            else:
+                results["failed"] += 1
+                app.logger.warning(f"FAILED: Friend request to UID {uid} on {server_name}, Status: {response.status_code}")
+                if response.content:
+                    app.logger.info(f"Response: {response.content[:100]}")
+    except Exception as e:
+        with results_lock:
+            results["failed"] += 1
+        app.logger.error(f"Request error for UID {uid} on {server_name}: {e}")
+
+@app.route("/send_requests", methods=["GET"])
+def send_requests():
+    """Friend request endpoint using same token system as like functionality"""
+    uid = request.args.get("uid")
+    server_name = request.args.get("server_name", "").upper()
+    count = request.args.get("count")
+
+    if not uid:
+        return unicode_jsonify({"error": "uid parameter is required"}, 400)
+
+    # Auto-detect server if not provided (same logic as like system)
+    if not server_name:
+        app.logger.info(f"Auto-detecting server for UID {uid}")
+        servers_to_try = ["IND", "NX", "AG"]
+        for test_server in servers_to_try:
+            with app.app_context():
+                tokens = load_tokens(test_server)
+                if tokens and len(tokens) > 0:
+                    encrypted_uid = enc(uid)
+                    if encrypted_uid:
+                        result = make_request(encrypted_uid, test_server, tokens[0]["token"])
+                        if result is not None:
+                            server_name = test_server
+                            app.logger.info(f"✓ Found UID {uid} on server {test_server}")
+                            break
+
+        if not server_name:
+            return unicode_jsonify({"error": f"UID {uid} not found on any available server"}, 404)
+
+    # Load tokens using same system as like functionality
+    with app.app_context():
+        tokens = load_tokens(server_name)
+        if tokens is None or len(tokens) == 0:
+            return unicode_jsonify({"error": f"No valid tokens found for server {server_name}"}, 500)
+
+    total_available_tokens = len(tokens)
+    
+    # Handle count parameter - randomly select tokens if count is specified
+    if count:
+        try:
+            count = int(count)
+            if count <= 0:
+                return unicode_jsonify({"error": "count must be a positive integer"}, 400)
+            
+            # Make sure count doesn't exceed available tokens
+            if count > total_available_tokens:
+                app.logger.warning(f"Requested count {count} exceeds available tokens {total_available_tokens}, using all available tokens")
+                count = total_available_tokens
+            
+            # Randomly select 'count' number of tokens
+            tokens = random.sample(tokens, count)
+            app.logger.info(f"🎲 Randomly selected {len(tokens)} tokens from {total_available_tokens} available tokens")
+        except ValueError:
+            return unicode_jsonify({"error": "count must be a valid integer"}, 400)
+
+    app.logger.info(f"🚀 Starting friend requests for UID {uid} on server {server_name} with {len(tokens)} tokens (Total available: {total_available_tokens})")
+
+    # Try to get player name using same approach as like system
+    player_name = f"Player_{uid}"
+    try:
+        for token_data in tokens[:3]:  # Try first 3 tokens
+            token = token_data["token"]
+            encrypted_uid = enc(uid)
+            player_info = make_request(encrypted_uid, server_name, token)
+            if player_info and hasattr(player_info, 'AccountInfo') and hasattr(player_info.AccountInfo, 'PlayerNickname'):
+                player_name = player_info.AccountInfo.PlayerNickname
+                break
+    except Exception as e:
+        app.logger.warning(f"Could not get player name for UID {uid}: {e}")
+
+    # Send friend requests using selected tokens
+    results = {"success": 0, "failed": 0}
+    results_lock = threading.Lock()
+    threads = []
+
+    for token_data in tokens:
+        token = token_data["token"]
+        thread = threading.Thread(target=send_friend_request_main, args=(uid, token, results, results_lock, server_name))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    total_requests = results["success"] + results["failed"]
+    status = 1 if results["success"] > 0 else 2
+
+    return unicode_jsonify({
+        "player_name": player_name,
+        "server_name": server_name,
+        "success_count": results["success"],
+        "failed_count": results["failed"],
+        "status": status,
+        "total_available_tokens": total_available_tokens,
+        "tokens_used": len(tokens),
+        "total_requests_sent": total_requests,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+@app.route("/like", methods=["GET"])
+def handle_requests():
+    uid = request.args.get("uid")
+    server_name = request.args.get("server_name", "").upper()
+
+    # Allow auto-detection if server_name is not provided
+    if not uid:
+        return unicode_jsonify({"error": "UID is required"}, 400)
+
+    # If no server specified, try to auto-detect the correct server
+    if not server_name:
         app.logger.info(f"Auto-detecting server for UID {uid}")
         # Try servers in order of likelihood
         servers_to_try = ["IND", "NX", "AG"]
